@@ -1,0 +1,25 @@
+{
+  "name": "pulse-market-watchlist",
+  "version": "1.0.0",
+  "description": "Pulse — Smart Market Watchlist: Detects what meaningfully changed since your last check",
+  "private": true,
+  "scripts": {
+    "start": "node backend/server.js",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "db:migrate": "cd backend && npm run db:migrate",
+    "db:seed": "cd backend && npm run db:seed",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test -- --run"
+  },
+  "keywords": [
+    "market-watchlist",
+    "stocks",
+    "fintech",
+    "pulse",
+    "meaningful-changes"
+  ],
+  "author": "Pulse Team",
+  "license": "MIT"
+}
