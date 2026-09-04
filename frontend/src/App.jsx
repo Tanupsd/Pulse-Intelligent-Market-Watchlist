@@ -1,6 +1,10 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import HomePage from './pages/HomePage';
+import ComparisonPage from './pages/ComparisonPage';
+import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
@@ -12,7 +16,7 @@ function ProtectedRoute({ children }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin" />
+        <div className="w-8 h-8 rounded-full border-2 border-white border-t-transparent animate-spin" />
       </div>
     );
   }
@@ -24,13 +28,13 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-function PublicRoute({ children }) {
+function PublicAuthRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin" />
+        <div className="w-8 h-8 rounded-full border-2 border-white border-t-transparent animate-spin" />
       </div>
     );
   }
@@ -44,23 +48,29 @@ function PublicRoute({ children }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
         <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+          {/* Public Landing & Discovery */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/compare" element={<ComparisonPage />} />
+          <Route path="/stocks/:symbol" element={<StockDetailPage />} />
 
-          {/* Protected Routes */}
+          {/* Authentication Pages (Redirect to dashboard if already logged in) */}
+          <Route path="/login" element={<PublicAuthRoute><LoginPage /></PublicAuthRoute>} />
+          <Route path="/register" element={<PublicAuthRoute><RegisterPage /></PublicAuthRoute>} />
+
+          {/* Authenticated Application Experience */}
           <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/watchlists/:id" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/stocks/:symbol" element={<ProtectedRoute><StockDetailPage /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
-          {/* Fallback */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Fallback to Public Home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

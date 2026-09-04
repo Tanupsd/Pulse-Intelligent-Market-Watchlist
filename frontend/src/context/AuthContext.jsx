@@ -41,14 +41,19 @@ export function AuthProvider({ children }) {
     return authUser;
   };
 
-  const register = async (email, password) => {
-    const res = await authApi.register(email, password);
+  const register = async (email, password, name = '', phone = '') => {
+    const res = await authApi.register({ email, password, name, phone });
     const { user: authUser, token: authToken } = res.data;
     setUser(authUser);
     setToken(authToken);
     localStorage.setItem('pulse_token', authToken);
     localStorage.setItem('pulse_user', JSON.stringify(authUser));
     return authUser;
+  };
+
+  const updateUser = (updatedUser) => {
+    setUser(updatedUser);
+    localStorage.setItem('pulse_user', JSON.stringify(updatedUser));
   };
 
   const logout = () => {
@@ -67,6 +72,7 @@ export function AuthProvider({ children }) {
         loading,
         login,
         register,
+        updateUser,
         logout,
       }}
     >

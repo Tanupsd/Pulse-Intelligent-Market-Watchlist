@@ -38,7 +38,6 @@ describe('Pulse API Integration Tests', () => {
     } catch (e) {
       // ignore
     }
-    await pool.end();
   });
 
   describe('Authentication Endpoints', () => {

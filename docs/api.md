@@ -200,3 +200,54 @@ Toggle market data status for stale/delayed testing:
 ```json
 { "status": "STALE" }
 ```
+
+---
+
+## 6. User Profile, Security & Telemetry [Protected]
+
+### `GET /api/users/me`
+Retrieve profile details (`id`, `name`, `phone`, `email`, `created_at`, `updated_at`).
+
+### `PUT /api/users/me`
+Update profile details (`name`, `phone`, `email`). Enforces RFC email format and checks for email uniqueness across accounts.
+
+### `PUT /api/users/me/password`
+Update password. Verifies `currentPassword` with bcrypt before accepting new password (minimum 6 characters).
+```json
+{
+  "currentPassword": "password123",
+  "newPassword": "newSecurePassword456"
+}
+```
+
+### `POST /api/users/me/stock-visits`
+Record a user view event on a stock ticker. Includes an automatic 60-second cooldown deduplication window.
+```json
+{ "symbol": "NVDA" }
+```
+
+### `GET /api/users/me/analytics`
+Retrieve aggregated interaction frequency per symbol and total visit count:
+```json
+{
+  "analytics": [
+    { "symbol": "NVDA", "visits": 18, "last_visited": "2026-09-04T09:12:00Z" },
+    { "symbol": "AAPL", "visits": 14, "last_visited": "2026-09-04T08:45:00Z" }
+  ],
+  "totalVisits": 32
+}
+```
+
+---
+
+## 7. Public Market Rankings & Stock Comparison
+
+### `GET /api/market/top-performers?limit=5&offset=0`
+Public endpoint returning equities sorted strictly descending by percentage gain (`changePercent`). Supports pagination for asynchronous loading.
+
+### `GET /api/market/top-losers?limit=5&offset=0`
+Public endpoint returning equities sorted strictly ascending by percentage loss (`changePercent`). Supports pagination for asynchronous loading.
+
+### `GET /api/stocks/compare?symbols=AAPL,NVDA&range=1M`
+Public side-by-side comparison endpoint for 2 to 5 stocks. Returns current quotes, period return %, 52-week ranges, PE ratios, and historical curve points.
+

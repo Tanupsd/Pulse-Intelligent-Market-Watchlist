@@ -7,7 +7,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-v16%2B-blue.svg)](https://www.postgresql.org/)
 [![React](https://img.shields.io/badge/React-18-cyan.svg)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38BDF8)](https://tailwindcss.com/)
-[![Tests](https://img.shields.io/badge/Tests-36_Passing-success)](https://jestjs.io/)
+[![Tests](https://img.shields.io/badge/Tests-57_Passing-success)](https://jestjs.io/)
 
 ---
 
@@ -186,21 +186,51 @@ npm run dev
 
 ---
 
+## 2.1 Public Experience vs. Authenticated Experience
+
+### Public Experience (Zero Friction, No Login Required):
+- **Home / Landing (`/`)**:
+  - Live **Market Movers**: Top 5 Performers & Top 5 Losers ranked strictly by daily percentage change.
+  - Asynchronous **"View More"** loading 50 additional global stocks without page reloads.
+  - Inline **Get Started / Quick Login** hero card with 1-click demo access.
+- **Stock Comparison (`/compare`)**:
+  - Side-by-side comparison defaulting to `AAPL` vs `NVDA`.
+  - **"+ Add Stock"** action supporting up to 5 concurrent assets with clean horizontal scrolling.
+  - Normalized % Return performance curves over 1D, 1W, 1M, and 1Y ranges via Recharts.
+- **Watchlists Preview**:
+  - Clicking "Watchlists" when logged out opens an informative **Auth Prompt Modal** explaining checkpoints rather than an abrupt error.
+
+### Authenticated Experience:
+- **Personal Checkpoints & Meaningful Changes (`/dashboard`)**:
+  - Full "Since Your Last Check" telemetry, Attention Scores (0–100), and non-causal explanation modals.
+- **Account & Analytics (`/profile`)**:
+  - Edit personal details (Name, Phone, Email) with collision validation.
+  - Secure password changes with current password bcrypt verification.
+  - **Most Visited Stocks**: Server-side telemetry aggregated via PostgreSQL (`COUNT(*) ... GROUP BY symbol`) visualized with a Recharts bar chart.
+  - Automatic 60-second cooldown deduplication on stock visit logging.
+
+---
+
 ## 7. Running Tests
 
-### Backend Tests (26 Tests: Unit & Integration):
+### Backend Tests (40 Tests: Unit, Integration & Enhancements):
 ```bash
 cd backend
 npm test
 ```
 Tests cover:
-- Meaningful Change Engine unit calculations
+- Meaningful Change Engine unit calculations & scoring weights
 - Missing checkpoint / first visit handling
 - Stale data detection
-- User isolation (User A cannot access User B watchlists)
+- User isolation (User A cannot access User B watchlists or analytics)
 - Full API authentication and watchlist CRUD workflows
+- User Profile update and validation (duplicate email prevention)
+- Password update with bcrypt verification
+- Stock visit deduplication & PostgreSQL analytics aggregation
+- Market rankings sorting & pagination (Top Performers & Losers)
+- Public stock comparison endpoint
 
-### Frontend Tests (10 Tests: RTL & Vitest):
+### Frontend Tests (17 Tests: RTL & Vitest):
 ```bash
 cd frontend
 npm test -- --run
@@ -210,6 +240,11 @@ Tests cover:
 - DataStatusPill with stale and delayed warnings
 - StockCard with "Since Last Check" delta
 - WhyChangedModal interactive signal explanation
+- AuthPromptModal checkpoint explanation and navigation
+- Public Navbar links and authenticated user controls
+- HomePage hero value proposition and live rankings
+- Public ComparisonPage side-by-side fundamentals and charts
+- ProfilePage user information form, password update, and analytics chart
 
 ---
 

@@ -5,6 +5,7 @@ const morgan = require('morgan');
 require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 const watchlistRoutes = require('./routes/watchlistRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const stocksRoutes = require('./routes/stocksRoutes');
@@ -35,6 +36,7 @@ app.get('/api/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/watchlists', dashboardRoutes); // Summary & Checkpoint handlers
 app.use('/api/watchlists', watchlistRoutes);  // CRUD & Stock management
 app.use('/api/stocks', stocksRoutes);

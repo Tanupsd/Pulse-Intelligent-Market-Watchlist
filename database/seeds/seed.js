@@ -13,6 +13,7 @@ async function runSeed() {
     console.log('[Seed] Truncating existing tables...');
     await client.query(`
       TRUNCATE TABLE 
+        stock_visits,
         detected_changes,
         market_events,
         user_checkpoints,
@@ -29,20 +30,20 @@ async function runSeed() {
     const passwordHash = await bcrypt.hash('password123', salt);
 
     const userRes = await client.query(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
-       RETURNING id, email`,
-      ['demo@example.com', passwordHash]
+      `INSERT INTO users (email, password_hash, name, phone)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name, phone`,
+      ['demo@example.com', passwordHash, 'Demo Investor', '+1 555 019 2834']
     );
     const userId = userRes.rows[0].id;
     console.log(`[Seed] Demo user created with ID: ${userId}`);
 
     // Also create a second user for user-isolation tests
     const user2Res = await client.query(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
+      `INSERT INTO users (email, password_hash, name, phone)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, email`,
-      ['other@example.com', passwordHash]
+      ['other@example.com', passwordHash, 'Other User', '+1 555 019 9999']
     );
     const user2Id = user2Res.rows[0].id;
 
@@ -238,6 +239,38 @@ async function runSeed() {
         [ev.symbol, ev.event_type, ev.title, ev.description, ev.source, ev.url, ev.timestamp, ev.importance]
       );
     }
+
+    // 8. Seed Stock Visits for Analytics
+    console.log('[Seed] Seeding stock visits for analytics...');
+    const visitCounts = [
+      { symbol: 'NVDA', count: 18 },
+      { symbol: 'AAPL', count: 14 },
+      { symbol: 'TSLA', count: 11 },
+      { symbol: 'MSFT', count: 9 },
+      { symbol: 'AMD',  count: 6 },
+      { symbol: 'AMZN', count: 4 },
+      { symbol: 'GOOGL', count: 2 },
+    ];
+
+    for (const item of visitCounts) {
+      for (let i = 0; i < item.count; i++) {
+        // distribute timestamps across past 72 hours
+        const minutesAgo = (i * 240) + Math.floor(Math.random() * 60);
+        const visitTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+        await client.query(
+          `INSERT INTO stock_visits (user_id, symbol, visited_at)
+           VALUES ($1, $2, $3)`,
+          [userId, item.symbol, visitTime]
+        );
+      }
+    }
+
+    // Also add a couple visits for user2 to test user isolation
+    await client.query(
+      `INSERT INTO stock_visits (user_id, symbol, visited_at)
+       VALUES ($1, $2, NOW())`,
+      [user2Id, 'NVDA']
+    );
 
     await client.query('COMMIT');
     console.log('[Seed] Seeding completed successfully!');

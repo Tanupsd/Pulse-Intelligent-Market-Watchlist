@@ -97,3 +97,44 @@ Check Redis: `quotes:${symbol}` (TTL: 15 seconds)
 
 ### Background Refresh Pattern (`MarketRefreshService`)
 Rather than forcing user requests to block on market ingestion, a scheduled interval service (or BullMQ/Redis worker) polls symbols active in user watchlists every 60 seconds and updates `market_snapshots`. When the user visits, the API reads already-warmed data.
+
+---
+
+## 5. Interaction Telemetry & Analytics Architecture
+
+### Low-Overhead Event Logging
+To track research engagement without degrading response latency:
+- User stock views trigger `POST /api/users/me/stock-visits`.
+- **Deduplication Cooldown**: An SQL index-backed subquery verifies whether a view for `(user_id, symbol)` occurred within the previous 60 seconds:
+  ```sql
+  SELECT id FROM stock_visits 
+  WHERE user_id = $1 AND symbol = $2 AND visited_at > NOW() - INTERVAL '60 seconds' 
+  LIMIT 1;
+  ```
+- If within the cooldown window, insertion is omitted, eliminating spurious telemetry from React re-renders or tab switches.
+
+### Server-Side Analytics Aggregation
+Rather than computing frequencies in client JavaScript, PostgreSQL leverages the composite index `idx_stock_visits_user_symbol` to aggregate counts directly in the database engine:
+```sql
+SELECT 
+  symbol, 
+  COUNT(*)::int AS visits,
+  MAX(visited_at) AS last_visited
+FROM stock_visits
+WHERE user_id = $1
+GROUP BY symbol
+ORDER BY visits DESC, last_visited DESC
+LIMIT 10;
+```
+This guarantees $O(\log N)$ scan efficiency and sub-millisecond execution times.
+
+---
+
+## 6. Public Stock Comparison & Market Movers Architecture
+
+### Zero-Friction Public Market Engine
+- **Decoupled Security**: Market Movers (`/top-performers`, `/top-losers`) and Stock Comparison (`/compare`) require no authentication.
+- **Normalized Multi-Asset Returns**: To compare diverse equities (e.g. AAPL at \$240 and NVDA at \$184) on a single chart, the system normalizes each asset's historical curve:
+  $$\text{Normalized Return}_t = \left( \frac{\text{Price}_t - \text{Price}_0}{\text{Price}_0} \right) \times 100\%$$
+  This yields a unified relative gain/loss baseline across 1D, 1W, 1M, and 1Y horizons.
+

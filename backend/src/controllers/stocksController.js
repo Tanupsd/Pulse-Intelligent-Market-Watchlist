@@ -16,10 +16,31 @@ async function getStockDetail(req, res) {
     const events = await marketDataService.getEvents(cleanSym);
     const benchmark = await marketDataService.getBenchmarkPerformance();
 
-    let checkpoint = null;
-    if (userId) {
-      checkpoint = await checkpointService.getStockCheckpoint(userId, cleanSym);
+    if (!userId) {
+      // Unauthenticated: Public stock data only
+      // NO checkpoint info, NO attention score, NO sinceLastCheck
+      return res.status(200).json({
+        stock: {
+          symbol: quote.symbol,
+          name: quote.name,
+          sector: quote.sector,
+          price: Number(quote.price),
+          dailyChange: quote.changePercent,
+          volume: Number(quote.volume || 0),
+          averageVolume: Number(quote.averageVolume || quote.volume || 0),
+          marketCap: Number(quote.marketCap || 0),
+          dataStatus: quote.dataStatus || 'LIVE',
+          source: quote.source || 'PROVIDER',
+          timestamp: quote.timestamp || new Date().toISOString(),
+          isAuthenticated: false,
+        },
+        events,
+        benchmark,
+      });
     }
+
+    // Authenticated: Load user's actual checkpoint and run full Meaningful Change Engine
+    const checkpoint = await checkpointService.getStockCheckpoint(userId, cleanSym);
 
     const evaluated = changeEngine.evaluate({
       quote,
@@ -29,7 +50,10 @@ async function getStockDetail(req, res) {
     });
 
     return res.status(200).json({
-      stock: evaluated,
+      stock: {
+        ...evaluated,
+        isAuthenticated: true,
+      },
       events,
       benchmark,
     });
@@ -48,6 +72,12 @@ async function getStockChanges(req, res) {
     const { symbol } = req.params;
     const cleanSym = symbol.toUpperCase().trim();
     const userId = req.user ? req.user.id : null;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: 'Authentication required to access personalized checkpoint change analysis.',
+      });
+    }
 
     const quote = await marketDataService.getQuote(cleanSym);
     const events = await marketDataService.getEvents(cleanSym);
@@ -116,8 +146,6 @@ async function searchStocks(req, res) {
   }
 }
 
-const { query } = require('../db/pool');
-
 /**
  * POST /api/market/scenario
  * Toggle between demo, quiet, and volatile scenarios
@@ -130,29 +158,11 @@ async function setScenario(req, res) {
     }
 
     marketDataService.setScenario(scenario);
-
-    // Reset user checkpoints in database to match the scenario's calibrated baseline
-    const catalog = marketDataService.mockProvider.getMockCatalog();
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-
-    for (const [sym, stock] of Object.entries(catalog)) {
-      const scData = stock.scenarios[scenario] || stock.scenarios.demo;
-      if (scData.checkpointPrice) {
-        await query(
-          `UPDATE user_checkpoints
-           SET price = $1, volume = $2, timestamp = $3
-           WHERE symbol = $4`,
-          [scData.checkpointPrice, scData.checkpointVolume || 30000000, twoHoursAgo, sym]
-        );
-      }
-    }
-
     return res.status(200).json({
-      message: `Scenario switched to '${scenario}'. Checkpoints synchronized.`,
+      message: `Scenario switched to '${scenario}'.`,
       scenario,
     });
   } catch (err) {
-    console.error('[Set Scenario Error]:', err);
     return res.status(500).json({ error: 'Failed to set scenario.' });
   }
 }
@@ -206,6 +216,51 @@ async function setDataStatus(req, res) {
   }
 }
 
+/**
+ * GET /api/market/top-performers?limit=5&offset=0
+ */
+async function getTopPerformers(req, res) {
+  try {
+    const { limit = 5, offset = 0 } = req.query;
+    const data = await marketDataService.getTopPerformers(limit, offset);
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error('[Get Top Performers Error]:', err);
+    return res.status(500).json({ error: 'Failed to fetch top performers.' });
+  }
+}
+
+/**
+ * GET /api/market/top-losers?limit=5&offset=0
+ */
+async function getTopLosers(req, res) {
+  try {
+    const { limit = 5, offset = 0 } = req.query;
+    const data = await marketDataService.getTopLosers(limit, offset);
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error('[Get Top Losers Error]:', err);
+    return res.status(500).json({ error: 'Failed to fetch top losers.' });
+  }
+}
+
+/**
+ * GET /api/stocks/compare?symbols=AAPL,NVDA&range=1M
+ */
+async function compareStocks(req, res) {
+  try {
+    const { symbols, range = '1M' } = req.query;
+    if (!symbols || !symbols.trim()) {
+      return res.status(200).json({ symbols: [], range, stocks: [] });
+    }
+    const data = await marketDataService.getComparisonData(symbols, range);
+    return res.status(200).json(data);
+  } catch (err) {
+    console.error('[Compare Stocks Error]:', err);
+    return res.status(500).json({ error: 'Failed to fetch comparison data.' });
+  }
+}
+
 module.exports = {
   getStockDetail,
   getStockChanges,
@@ -215,4 +270,7 @@ module.exports = {
   getScenario,
   setProviderMode,
   setDataStatus,
+  getTopPerformers,
+  getTopLosers,
+  compareStocks,
 };

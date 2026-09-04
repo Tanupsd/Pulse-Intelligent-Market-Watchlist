@@ -48,3 +48,13 @@ export function ChartSkeleton() {
     </div>
   );
 }
+
+export default function SkeletonLoader({ count = 3 }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="h-12 bg-surface-subtle border border-surface-border rounded-lg animate-pulse" />
+      ))}
+    </div>
+  );
+}

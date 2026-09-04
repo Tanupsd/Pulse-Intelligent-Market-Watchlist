@@ -11,7 +11,9 @@ import {
   ExternalLink,
   Calendar,
   AlertTriangle,
-  ChevronRight
+  Lock,
+  ChevronRight,
+  ShieldAlert
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -20,11 +22,11 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid,
-  BarChart,
-  Bar
+  CartesianGrid
 } from 'recharts';
-import { stocksApi } from '../services/api';
+import { stocksApi, usersApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import Navbar from '../components/Navbar';
 import AttentionBadge from '../components/AttentionBadge';
 import DataStatusPill from '../components/DataStatusPill';
@@ -35,6 +37,8 @@ import { ChartSkeleton, CardSkeleton } from '../components/SkeletonLoader';
 export default function StockDetailPage() {
   const { symbol } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { isDark } = useTheme();
 
   const [stockData, setStockData] = useState(null);
   const [events, setEvents] = useState([]);
@@ -45,7 +49,7 @@ export default function StockDetailPage() {
   const [error, setError] = useState(null);
   const [showWhyModal, setShowWhyModal] = useState(false);
 
-  // Fetch stock detail
+  // Fetch stock detail and track visit
   useEffect(() => {
     async function loadStock() {
       if (!symbol) return;
@@ -55,6 +59,11 @@ export default function StockDetailPage() {
         const res = await stocksApi.getDetail(symbol);
         setStockData(res.data.stock);
         setEvents(res.data.events || []);
+
+        // Record stock visit for authenticated user telemetry
+        if (isAuthenticated) {
+          usersApi.recordVisit(symbol).catch(() => {});
+        }
       } catch (err) {
         console.error('Error loading stock detail:', err);
         setError(`Could not find details for ${symbol}.`);
@@ -63,7 +72,7 @@ export default function StockDetailPage() {
       }
     }
     loadStock();
-  }, [symbol]);
+  }, [symbol, isAuthenticated]);
 
   // Fetch chart history
   useEffect(() => {
@@ -89,30 +98,34 @@ export default function StockDetailPage() {
 
   const dailyDrop = (stock?.dailyChange || 0) < 0;
 
-  // Build combined event timeline (checkpoint -> events -> current)
+  // Build event timeline
   const timelineItems = [];
-  if (stock?.hasCheckpoint && stock.checkpointTimestamp) {
-    timelineItems.push({
-      time: new Date(stock.checkpointTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      title: 'You last checked',
-      description: `Baseline checkpoint captured at $${stock.checkpointPrice?.toFixed(2) || stock.price.toFixed(2)}`,
-      type: 'CHECKPOINT',
-      color: 'bg-brand-500',
-    });
+
+  if (isAuthenticated && stock) {
+    // Authenticated: Include baseline checkpoint
+    if (stock.hasCheckpoint && stock.checkpointTimestamp) {
+      timelineItems.push({
+        time: new Date(stock.checkpointTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        title: 'You last checked',
+        description: `Baseline checkpoint captured at $${stock.checkpointPrice ? stock.checkpointPrice.toFixed(2) : stock.price.toFixed(2)}`,
+        type: 'CHECKPOINT',
+        color: 'bg-brand-500',
+      });
+    }
+
+    // Volume surge signal in timeline if anomalous
+    if (stock.signals?.volumeRatio >= 1.8) {
+      timelineItems.push({
+        time: 'During session',
+        title: `Trading volume surge (${stock.signals.volumeRatio}× average)`,
+        description: 'Anomalous institutional trading activity recorded above baseline.',
+        type: 'VOLUME',
+        color: 'bg-indigo-400',
+      });
+    }
   }
 
-  // Volume surge signal in timeline if anomalous
-  if (stock?.signals?.volumeRatio >= 1.8) {
-    timelineItems.push({
-      time: 'During session',
-      title: `Trading volume surge (${stock.signals.volumeRatio}× average)`,
-      description: 'Anomalous institutional trading activity recorded above baseline.',
-      type: 'VOLUME',
-      color: 'bg-indigo-400',
-    });
-  }
-
-  // Events
+  // Public events (available for both public and authenticated)
   if (events && events.length > 0) {
     events.forEach(ev => {
       timelineItems.push({
@@ -127,8 +140,8 @@ export default function StockDetailPage() {
     });
   }
 
-  // Current state point
-  if (stock) {
+  // Authenticated current state marker
+  if (isAuthenticated && stock && stock.sinceLastCheck !== undefined) {
     timelineItems.push({
       time: 'Now',
       title: `Current Price: $${stock.price.toFixed(2)}`,
@@ -138,6 +151,22 @@ export default function StockDetailPage() {
     });
   }
 
+  const formatMarketCap = (val) => {
+    const num = Number(val || 0);
+    if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+    return `$${num.toLocaleString()}`;
+  };
+
+  const formatVolume = (val) => {
+    const num = Number(val || 0);
+    if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+    if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+    if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+    return num.toString();
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -146,11 +175,11 @@ export default function StockDetailPage() {
         {/* Back Link */}
         <div className="mb-6">
           <Link
-            to="/dashboard"
+            to={isAuthenticated ? "/dashboard" : "/"}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Watchlist Dashboard</span>
+            <span>{isAuthenticated ? "Back to Watchlist Dashboard" : "Back to Market"}</span>
           </Link>
         </div>
 
@@ -165,10 +194,10 @@ export default function StockDetailPage() {
             <h2 className="text-lg font-bold text-white">Asset Not Found</h2>
             <p className="text-xs text-slate-400">{error || 'Unable to retrieve asset details.'}</p>
             <Link
-              to="/dashboard"
+              to={isAuthenticated ? "/dashboard" : "/"}
               className="inline-block px-4 py-2 bg-brand-500 text-white text-xs font-semibold rounded-xl"
             >
-              Return to Dashboard
+              Return to Market
             </Link>
           </div>
         ) : (
@@ -179,13 +208,16 @@ export default function StockDetailPage() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h1 className="text-3xl font-extrabold text-white tracking-tight">{stock.symbol}</h1>
-                    <AttentionBadge severity={stock.severity} score={stock.attentionScore} />
+                    {/* Attention Badge: ONLY for authenticated users */}
+                    {isAuthenticated && stock.attentionScore !== undefined && (
+                      <AttentionBadge severity={stock.severity} score={stock.attentionScore} />
+                    )}
                     <DataStatusPill status={stock.dataStatus} timestamp={stock.timestamp} />
                   </div>
                   <p className="text-sm text-slate-400 mt-1">{stock.name} • {stock.sector}</p>
                 </div>
 
-                {/* Price & Daily Change */}
+                {/* Price & Daily Change (Public Market Data) */}
                 <div className="md:text-right">
                   <div className="text-3xl font-extrabold font-mono text-white tracking-tight">
                     ${stock.price.toFixed(2)}
@@ -203,57 +235,128 @@ export default function StockDetailPage() {
                 </div>
               </div>
 
-              {/* SINCE LAST CHECK Matrix */}
-              <div className="mt-6 pt-5 border-t border-surface-border grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    Then (Previous Checkpoint)
-                  </span>
-                  <div className="text-xl font-bold font-mono text-slate-200 mt-1">
-                    ${stock.checkpointPrice ? stock.checkpointPrice.toFixed(2) : stock.price.toFixed(2)}
-                  </div>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    {stock.hasCheckpoint ? 'Captured during prior visit' : 'Initial baseline'}
-                  </span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    Now (Current State)
-                  </span>
-                  <div className="text-xl font-bold font-mono text-white mt-1">
-                    ${stock.price.toFixed(2)}
-                  </div>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    Real-time market snapshot
-                  </span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    Change Since Last Check
-                  </span>
-                  <div className="flex items-baseline justify-between mt-1">
-                    <div
-                      className={`text-xl font-bold font-mono ${
-                        isDrop ? 'text-rose-400' : isGain ? 'text-emerald-400' : 'text-slate-200'
-                      }`}
-                    >
-                      {isDrop ? '-' : isGain ? '+' : ''}{absDelta.toFixed(2)}%
+              {/* AUTHENTICATED: SINCE LAST CHECK Matrix */}
+              {isAuthenticated && stock.attentionScore !== undefined ? (
+                <div className="mt-6 pt-5 border-t border-surface-border grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                      Then (Previous Checkpoint)
+                    </span>
+                    <div className="text-xl font-bold font-mono text-slate-200 mt-1">
+                      ${stock.checkpointPrice ? stock.checkpointPrice.toFixed(2) : stock.price.toFixed(2)}
                     </div>
-                    <button
-                      onClick={() => setShowWhyModal(true)}
-                      className="px-2 py-1 text-xs font-semibold text-brand-400 bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg inline-flex items-center gap-1 transition-colors"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      <span>Why it matters</span>
-                    </button>
+                    <span className="text-[11px] text-slate-500 mt-0.5 block">
+                      {stock.hasCheckpoint ? 'Captured during prior visit' : 'Initial baseline'}
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
-                    Attention Score: {stock.attentionScore}/100 ({stock.severity})
-                  </span>
+
+                  <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                      Now (Current State)
+                    </span>
+                    <div className="text-xl font-bold font-mono text-white mt-1">
+                      ${stock.price.toFixed(2)}
+                    </div>
+                    <span className="text-[11px] text-slate-500 mt-0.5 block">
+                      Real-time market snapshot
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-surface-subtle border border-surface-border">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                      Change Since Last Check
+                    </span>
+                    <div className="flex items-baseline justify-between mt-1">
+                      <div
+                        className={`text-xl font-bold font-mono ${
+                          isDrop ? 'text-rose-400' : isGain ? 'text-emerald-400' : 'text-slate-200'
+                        }`}
+                      >
+                        {isDrop ? '-' : isGain ? '+' : ''}{absDelta.toFixed(2)}%
+                      </div>
+                      <button
+                        onClick={() => setShowWhyModal(true)}
+                        className="px-2 py-1 text-xs font-semibold text-brand-400 bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-lg inline-flex items-center gap-1 transition-colors"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5" />
+                        <span>Why it matters</span>
+                      </button>
+                    </div>
+                    <span className="text-[11px] text-slate-500 mt-0.5 block">
+                      Attention Score: {stock.attentionScore}/100 ({stock.severity})
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* PUBLIC: General Market Overview & Checkpoint Sign-In Banner */
+                <div className="mt-6 pt-5 border-t border-surface-border space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="p-3.5 rounded-xl bg-surface-subtle border border-surface-border">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                        Market Cap
+                      </span>
+                      <div className="text-base font-bold font-mono text-white mt-1">
+                        {formatMarketCap(stock.marketCap)}
+                      </div>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-surface-subtle border border-surface-border">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                        Volume
+                      </span>
+                      <div className="text-base font-bold font-mono text-white mt-1">
+                        {formatVolume(stock.volume)}
+                      </div>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-surface-subtle border border-surface-border">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                        Avg Volume (30D)
+                      </span>
+                      <div className="text-base font-bold font-mono text-white mt-1">
+                        {formatVolume(stock.averageVolume)}
+                      </div>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-surface-subtle border border-surface-border">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                        Sector
+                      </span>
+                      <div className="text-base font-bold text-white mt-1 truncate">
+                        {stock.sector || 'Equities'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Public Sign-in CTA for Personal Checkpoints */}
+                  <div className="p-4 rounded-xl bg-surface-subtle/80 border border-surface-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-surface border border-surface-border flex items-center justify-center shrink-0">
+                        <Lock className="w-4 h-4 text-brand-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">
+                          Personalized Checkpoints & Attention Scoring
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          Sign in to track what changed since your last visit, inspect volume anomalies, and receive explainable alerts.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                      <Link
+                        to="/login"
+                        className="px-3 py-1.5 bg-white text-black font-semibold text-xs rounded-lg hover:bg-gray-200 transition-colors shadow-sm"
+                      >
+                        Sign In
+                      </Link>
+                      <Link
+                        to="/register"
+                        className="px-3 py-1.5 bg-surface hover:bg-surface-hover text-white text-xs font-semibold rounded-lg border border-surface-border transition-colors"
+                      >
+                        Create Account
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Price Chart Section */}
@@ -261,7 +364,9 @@ export default function StockDetailPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-base font-bold text-white tracking-tight">Price History & Trajectory</h2>
-                  <p className="text-xs text-slate-400">Intraday and historical checkpoint movement</p>
+                  <p className="text-xs text-slate-400">
+                    {isAuthenticated ? 'Intraday and historical checkpoint movement' : 'Intraday and historical public price trend'}
+                  </p>
                 </div>
 
                 {/* Range Selector */}
@@ -290,11 +395,11 @@ export default function StockDetailPage() {
                     <AreaChart data={historyData}>
                       <defs>
                         <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={isDrop ? '#EF4444' : '#6366F1'} stopOpacity={0.4} />
-                          <stop offset="95%" stopColor={isDrop ? '#EF4444' : '#6366F1'} stopOpacity={0.0} />
+                          <stop offset="5%" stopColor={dailyDrop ? '#EF4444' : '#6366F1'} stopOpacity={0.4} />
+                          <stop offset="95%" stopColor={dailyDrop ? '#EF4444' : '#6366F1'} stopOpacity={0.0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#26282E' : '#E2E8F0'} vertical={false} />
                       <XAxis
                         dataKey="timeLabel"
                         stroke="#6B7280"
@@ -312,10 +417,10 @@ export default function StockDetailPage() {
                       />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: '#111827',
-                          border: '1px solid #374151',
+                          backgroundColor: isDark ? '#111827' : '#FFFFFF',
+                          border: isDark ? '1px solid #374151' : '1px solid #CBD5E1',
                           borderRadius: '0.75rem',
-                          color: '#F3F4F6',
+                          color: isDark ? '#F3F4F6' : '#0F172A',
                           fontSize: '12px',
                         }}
                         formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Price']}
@@ -323,7 +428,7 @@ export default function StockDetailPage() {
                       <Area
                         type="monotone"
                         dataKey="price"
-                        stroke={isDrop ? '#EF4444' : '#6366F1'}
+                        stroke={dailyDrop ? '#EF4444' : '#6366F1'}
                         strokeWidth={2.5}
                         fillOpacity={1}
                         fill="url(#colorPrice)"
@@ -334,18 +439,20 @@ export default function StockDetailPage() {
               )}
             </div>
 
-            {/* Trading Volume Anomaly & Timeline Grid */}
+            {/* Trading Volume & Timeline Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Volume Anomaly Visualizer */}
+              {/* Volume Visualizer */}
               <div className="bg-surface border border-surface-border rounded-2xl p-6 shadow-xl space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-bold text-white tracking-tight">Trading Volume Activity</h3>
                     <p className="text-xs text-slate-400">Current session volume vs. 30-day baseline</p>
                   </div>
-                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                    {stock.signals?.volumeRatio || 1.0}× Average
-                  </span>
+                  {isAuthenticated && stock.signals?.volumeRatio && (
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                      {stock.signals.volumeRatio}× Average
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-4 pt-2">
@@ -360,7 +467,7 @@ export default function StockDetailPage() {
                       <div
                         className="h-full bg-brand-500 rounded-full transition-all duration-500"
                         style={{
-                          width: `${Math.min(100, (stock.signals?.volumeRatio || 1) * 33)}%`,
+                          width: `${Math.min(100, ((stock.signals?.volumeRatio || (stock.volume && stock.averageVolume ? stock.volume / stock.averageVolume : 1))) * 33)}%`,
                         }}
                       />
                     </div>
@@ -394,45 +501,57 @@ export default function StockDetailPage() {
               {/* Event Timeline */}
               <div className="bg-surface border border-surface-border rounded-2xl p-6 shadow-xl space-y-4">
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Change Event Timeline</h3>
-                  <p className="text-xs text-slate-400">Chronological sequence since your checkpoint</p>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    {isAuthenticated ? 'Change Event Timeline' : 'Market Events & News'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {isAuthenticated
+                      ? 'Chronological sequence since your checkpoint'
+                      : 'Public corporate announcements and market dispatches'}
+                  </p>
                 </div>
 
-                <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-border">
-                  {timelineItems.map((item, idx) => (
-                    <div key={idx} className="relative group">
-                      {/* Timeline dot */}
-                      <span
-                        className={`absolute -left-[27px] top-1 w-3 h-3 rounded-full border-2 border-surface ${item.color}`}
-                      />
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono font-semibold text-slate-400">
-                            {item.time}
-                          </span>
-                          {item.importance && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                              {item.importance}
+                {timelineItems.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    No recent events recorded for {stock.symbol}.
+                  </div>
+                ) : (
+                  <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-border">
+                    {timelineItems.map((item, idx) => (
+                      <div key={idx} className="relative group">
+                        {/* Timeline dot */}
+                        <span
+                          className={`absolute -left-[27px] top-1 w-3 h-3 rounded-full border-2 border-surface ${item.color}`}
+                        />
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-mono font-semibold text-slate-400">
+                              {item.time}
                             </span>
+                            {item.importance && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                {item.importance}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-100">{item.title}</h4>
+                          <p className="text-xs text-slate-400 leading-relaxed">{item.description}</p>
+                          {item.url && (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-brand-400 hover:underline pt-1"
+                            >
+                              <span>Read source dispatch</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
                           )}
                         </div>
-                        <h4 className="text-xs font-bold text-slate-100">{item.title}</h4>
-                        <p className="text-xs text-slate-400 leading-relaxed">{item.description}</p>
-                        {item.url && (
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-brand-400 hover:underline pt-1"
-                          >
-                            <span>Read source dispatch</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -441,11 +560,14 @@ export default function StockDetailPage() {
 
       <Footer />
 
-      <WhyChangedModal
-        stock={stock}
-        isOpen={showWhyModal}
-        onClose={() => setShowWhyModal(false)}
-      />
+      {/* Why Changed Modal: ONLY for authenticated users */}
+      {isAuthenticated && (
+        <WhyChangedModal
+          stock={stock}
+          isOpen={showWhyModal}
+          onClose={() => setShowWhyModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -18,14 +18,15 @@ api.interceptors.request.use((config) => {
   return config;
 }, (error) => Promise.reject(error));
 
-// Global response error handler
+// Global response error handler with public routes safety
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('pulse_token');
       localStorage.removeItem('pulse_user');
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+      const publicPaths = ['/', '/compare', '/login', '/register'];
+      if (!publicPaths.includes(window.location.pathname)) {
         window.location.href = '/login';
       }
     }
@@ -35,8 +36,16 @@ api.interceptors.response.use(
 
 export const authApi = {
   login: (email, password) => api.post('/auth/login', { email, password }),
-  register: (email, password) => api.post('/auth/register', { email, password }),
+  register: (data) => api.post('/auth/register', data),
   getMe: () => api.get('/auth/me'),
+};
+
+export const usersApi = {
+  getProfile: () => api.get('/users/me'),
+  updateProfile: (data) => api.put('/users/me', data),
+  updatePassword: (data) => api.put('/users/me/password', data),
+  recordVisit: (symbol) => api.post('/users/me/stock-visits', { symbol }),
+  getAnalytics: () => api.get('/users/me/analytics'),
 };
 
 export const watchlistApi = {
@@ -56,6 +65,10 @@ export const stocksApi = {
   getChanges: (symbol) => api.get(`/stocks/${symbol}/changes`),
   getHistory: (symbol, range = '1D') => api.get(`/stocks/${symbol}/history?range=${range}`),
   search: (query) => api.get(`/stocks/search?q=${encodeURIComponent(query)}`),
+  compare: (symbols, range = '1M') => {
+    const syms = Array.isArray(symbols) ? symbols.join(',') : symbols;
+    return api.get(`/stocks/compare?symbols=${encodeURIComponent(syms)}&range=${range}`);
+  },
 };
 
 export const marketApi = {
@@ -64,6 +77,8 @@ export const marketApi = {
   getProvider: () => api.get('/market/provider'),
   setProvider: (mode) => api.post('/market/provider', { mode }),
   setStatus: (status) => api.post('/market/status', { status }),
+  getTopPerformers: (limit = 5, offset = 0) => api.get(`/market/top-performers?limit=${limit}&offset=${offset}`),
+  getTopLosers: (limit = 5, offset = 0) => api.get(`/market/top-losers?limit=${limit}&offset=${offset}`),
 };
 
 export default api;

@@ -6,6 +6,7 @@ const {
   getStockChanges,
   getStockHistory,
   searchStocks,
+  compareStocks,
 } = require('../controllers/stocksController');
 
 // Optional auth middleware so checkpoint comparison works if logged in
@@ -28,6 +29,9 @@ router.use(optionalAuth);
 
 // Search stocks: GET /api/stocks/search?q=...
 router.get('/search', searchStocks);
+
+// Public Side-by-Side Stock Comparison: GET /api/stocks/compare?symbols=AAPL,NVDA&range=1M
+router.get('/compare', compareStocks);
 
 // Stock Detail: GET /api/stocks/:symbol
 router.get('/:symbol', getStockDetail);

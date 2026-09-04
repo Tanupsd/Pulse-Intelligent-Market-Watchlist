@@ -31,10 +31,10 @@ async function register(req, res) {
 
     // Insert user
     const userRes = await query(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
-       RETURNING id, email, created_at`,
-      [normalizedEmail, passwordHash]
+      `INSERT INTO users (email, password_hash, name, phone)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name, phone, created_at`,
+      [normalizedEmail, passwordHash, req.body.name ? req.body.name.trim() : '', req.body.phone ? req.body.phone.trim() : '']
     );
     const user = userRes.rows[0];
 
@@ -65,6 +65,8 @@ async function register(req, res) {
       user: {
         id: user.id,
         email: user.email,
+        name: user.name || '',
+        phone: user.phone || '',
         created_at: user.created_at,
       },
       token,
@@ -87,7 +89,7 @@ async function login(req, res) {
 
     // Query user by email
     const userRes = await query(
-      'SELECT id, email, password_hash, created_at FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, name, phone, created_at FROM users WHERE email = $1',
       [normalizedEmail]
     );
 
@@ -110,6 +112,8 @@ async function login(req, res) {
       user: {
         id: user.id,
         email: user.email,
+        name: user.name || '',
+        phone: user.phone || '',
         created_at: user.created_at,
       },
       token,
@@ -124,7 +128,7 @@ async function getMe(req, res) {
   try {
     const userId = req.user.id;
     const userRes = await query(
-      'SELECT id, email, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, phone, created_at FROM users WHERE id = $1',
       [userId]
     );
 
@@ -132,8 +136,15 @@ async function getMe(req, res) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
+    const row = userRes.rows[0];
     return res.status(200).json({
-      user: userRes.rows[0],
+      user: {
+        id: row.id,
+        email: row.email,
+        name: row.name || '',
+        phone: row.phone || '',
+        created_at: row.created_at,
+      },
     });
   } catch (err) {
     console.error('[Auth Me Error]:', err);

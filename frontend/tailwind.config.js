@@ -8,30 +8,42 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0B0F17',
+        background: 'rgb(var(--color-bg) / <alpha-value>)',
         surface: {
-          DEFAULT: '#111827',
-          hover: '#1F2937',
-          subtle: '#161F30',
-          border: '#243045',
+          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+          hover: 'rgb(var(--color-surface-hover) / <alpha-value>)',
+          subtle: 'rgb(var(--color-surface-subtle) / <alpha-value>)',
+          border: 'rgb(var(--color-surface-border) / <alpha-value>)',
+          active: 'rgb(var(--color-surface-active) / <alpha-value>)',
         },
         brand: {
-          50: '#EEF2FF',
-          100: '#E0E7FF',
-          500: '#6366F1',
-          600: '#4F46E5',
-          700: '#4338CA',
+          50: '#F8FAFC',
+          100: '#F1F5F9',
+          500: '#E2E8F0',
+          600: '#CBD5E1',
+          700: '#94A3B8',
+          accent: '#FFFFFF',
+        },
+        border: {
+          DEFAULT: 'rgb(var(--color-surface-border) / <alpha-value>)',
+          subtle: 'rgb(var(--color-surface-border) / <alpha-value>)',
+          strong: 'rgb(var(--color-surface-active) / <alpha-value>)',
         },
         severity: {
-          critical: '#EF4444',
+          critical: '#F43F5E',
           important: '#F59E0B',
           watch: '#EAB308',
           normal: '#10B981',
+        },
+        market: {
+          gain: '#10B981',
+          loss: '#F43F5E',
+          neutral: '#94A3B8',
         }
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       }
     },
   },
