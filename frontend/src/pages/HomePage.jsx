@@ -127,7 +127,7 @@ export default function HomePage() {
             <div className="space-y-4">
               <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-surface-subtle border border-surface-border text-xs font-mono text-gray-300">
                 <span className="w-2 h-2 rounded-full bg-market-gain"></span>
-                <span>CODE 2026 Hackathon Finalist</span>
+                <span>Pulse</span>
               </div>
 
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
